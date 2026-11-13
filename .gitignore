@@ -1,0 +1,11 @@
+binaries/*.pdb
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+# Local heavy checkouts / build scratch (not part of the shipped plugin).
+MeshAgent/
+MeshCentral/
+ref-extract/
+*.zip
+node_modules/

