@@ -161,7 +161,15 @@ try {
 
     # Enable the plugin system before the single service restart at the end,
     # so the Plugins page and pluginHandler exist when MeshCentral comes back.
-    Enable-PluginsInConfig -ConfigFile (Join-Path $MeshCentralRoot 'config.json')
+    # MeshCentral loads its config from <datapath>\config.json, where the
+    # default datapath is <root>\meshcentral-data - NOT the install root.
+    # Prefer the datapath config (what the server actually reads), and fall
+    # back to a root config.json for non-default layouts.
+    $dataConfig = Join-Path $data 'config.json'
+    $rootConfig = Join-Path $MeshCentralRoot 'config.json'
+    $configToEdit = if (Test-Path -LiteralPath $dataConfig) { $dataConfig } else { $rootConfig }
+    Write-Output "Enabling the plugin system in: $configToEdit"
+    Enable-PluginsInConfig -ConfigFile $configToEdit
 
     New-Item -ItemType Directory -Force -Path $plugin | Out-Null
     # A previous installer can leave plugin files with a SYSTEM-only ACL.
