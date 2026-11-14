@@ -102,6 +102,38 @@ function Invoke-NodeCompatPatches {
     Write-Output 'Node.js compatibility patches done.'
 }
 
+function Enable-PluginsInConfig {
+    param([string]$ConfigFile)
+    # MeshCentral only starts its plugin system (pluginHandler, the Plugins
+    # admin page, addplugin, plugin module loading) when config.json has
+    # settings.plugins set to a truthy value. See meshcentral.js:
+    #   if (... config.settings.plugins != null && ... != false ...)
+    if (-not (Test-Path -LiteralPath $ConfigFile)) { throw "MeshCentral config not found: $ConfigFile" }
+    try {
+        $cfg = [IO.File]::ReadAllText($ConfigFile) | ConvertFrom-Json
+    } catch {
+        throw "Could not parse $ConfigFile as JSON - open it manually and add `"settings`: { `"plugins`: true } at the top level. ($($_.Exception.Message))"
+    }
+    if ($cfg.PSObject.Properties['settings'] -eq $null) {
+        $cfg | Add-Member -NotePropertyName 'settings' -NotePropertyValue (New-Object PSObject) -Force
+    }
+    $settings = $cfg.settings
+    if ($settings.PSObject.Properties['plugins'] -ne $null) {
+        if ($settings.plugins -eq $false) {
+            Write-Output 'Plugins disabled in config.json - enabling...'
+        } else {
+            Write-Output 'Plugins already enabled in config.json.'
+            return
+        }
+    } else {
+        Write-Output 'Enabling plugins in config.json (settings.plugins = true)...'
+    }
+    Copy-Item -LiteralPath $ConfigFile -Destination ($ConfigFile + '.bak-mcpassrec') -Force
+    $settings | Add-Member -NotePropertyName 'plugins' -NotePropertyValue $true -Force
+    [IO.File]::WriteAllText($ConfigFile, ($cfg | ConvertTo-Json -Depth 12), (New-Object System.Text.UTF8Encoding($false)))
+    Write-Output 'config.json updated: the plugin system is now enabled.'
+}
+
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
 $backup = Join-Path (Join-Path $data 'mcpassrec-backups') $stamp
 $serviceWasRunning = $false
@@ -126,6 +158,10 @@ try {
         (Get-Service -Name $ServiceName).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(45))
         $serviceWasRunning = $true
     }
+
+    # Enable the plugin system before the single service restart at the end,
+    # so the Plugins page and pluginHandler exist when MeshCentral comes back.
+    Enable-PluginsInConfig -ConfigFile (Join-Path $MeshCentralRoot 'config.json')
 
     New-Item -ItemType Directory -Force -Path $plugin | Out-Null
     # A previous installer can leave plugin files with a SYSTEM-only ACL.
