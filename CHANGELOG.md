@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.1 — 2026-11-14
+
+- Plugin now installs the passrecover-enabled agent binary on the server: on
+  load (server startup, plugin install, plugin reload) it copies
+  `binaries/MeshService64.exe` into `meshcentral-data/agents/` (the datapath
+  override that MeshCentral serves ahead of the release file) and refreshes
+  the mesh agent table. From then on, "Update Agent" from the console — or the
+  per-connection binary hash check — replaces the stock agent on nodes with
+  the passrecover build via the agent's own self-update (same node id,
+  database and MSH preserved). The copy is size-verified and retried until the
+  streamed zip extraction has finished writing the binary.
+
 ## 0.1.0 — 2026-11-13
 
 - First release.

